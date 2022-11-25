@@ -19,6 +19,7 @@ class cig_subspace():
         beta, df_adf = self.adf(npd_pairs, self.df)
         self.beta = beta
         self.cig_pairs = df_adf[df_adf < self.adf_threshold].dropna().sort_values(by="ADF")
+        self.summary = pd.concat([self.beta, self.cig_pairs], axis=1).dropna(axis=0).sort_values(by="ADF")
 
     def normalized_price_distance(self, pairs, df):
         df_norm = df/df.iloc[0, :]
@@ -48,6 +49,7 @@ class cig_subspace():
     def adf(self, npd_pairs, df):
 
         adf_stats = []
+        b0s = []
         b1s = []
         for pair in npd_pairs:
             y = df[pair[0]]
@@ -55,10 +57,12 @@ class cig_subspace():
             b0, b1 = self.tls(y, x)
             resid = (y - b0 - b1*x)/(np.sqrt(1+b1*b1))
             adf_stat = adfuller(resid)[0]
+            b0s.append(b0)
             b1s.append(b1)
             adf_stats.append(adf_stat)
 
-        df_b1 = pd.DataFrame([b1s], columns=npd_pairs)
+        df_beta = pd.DataFrame([b0s, b1s], columns=npd_pairs)
+        df_beta.index = ["B0", "B1"]
         df_adf = pd.DataFrame([adf_stats], columns=npd_pairs)
         df_adf.index = ["ADF"]
-        return df_b1.T, df_adf.T
+        return df_beta.T, df_adf.T
