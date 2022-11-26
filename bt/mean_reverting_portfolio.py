@@ -6,7 +6,7 @@ from scipy.optimize import minimize
 
 class mrp():
 
-    def __init__(self, df, target_variance, NAV, n=50, adf_threshold = -2):
+    def __init__(self, df, target_variance, nlags=10, NAV=100000000, n=50, adf_threshold = -2):
 
         self.target_variance = target_variance
         self.NAV = NAV
@@ -16,7 +16,7 @@ class mrp():
         log_df_close = np.log(df)
 
         self.st = self.extract_spread(result, log_df_close)
-        self.M = self.autocov(self.st, 10)
+        self.M = self.autocov(self.st, nlags)
         self.weights = self.minimize_port(self.M, self.target_variance)
         self.position = self.positioning(beta, self.weights, self.NAV)
 
