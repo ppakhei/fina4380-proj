@@ -61,7 +61,7 @@ class mrp():
         bounds = ((-1.0,1.0),)*n
         weights_equal_1 = {
             'type': 'eq',
-            'fun': lambda weights: np.sum(weights)
+            'fun': lambda weights: np.sum(weights) - 1
         }
         vol_level = {
             'type': 'eq',
