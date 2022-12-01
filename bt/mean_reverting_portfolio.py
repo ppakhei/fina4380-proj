@@ -5,6 +5,7 @@ from scipy.odr import Model, Data, ODR
 from scipy.stats import linregress
 from statsmodels.tsa.api import VAR
 from scipy.optimize import minimize
+from liquidity_filter import liquidity_filter
 import itertools
 
 
@@ -23,6 +24,7 @@ class cig_subspace:
         self.beta, self.df_adf = self.adf()
         self.cig_pairs = self.df_adf[self.df_adf < self.adf_threshold].dropna().sort_values(by="ADF")
         self.summary = pd.concat([self.beta, self.cig_pairs], axis=1).dropna(axis=0).sort_values(by="ADF")
+        self.summary.index = self.summary.index.to_flat_index()
 
     def normalized_price_distance(self):
         df_norm = self.df / self.df.iloc[0, :]
@@ -74,30 +76,67 @@ class cig_subspace:
 
 class mrp:
 
-    def __init__(self, df, n=50, adf_threshold=-2, target_variance=0.03, nlags=10):
-        self.cigs = cig_subspace(df, n, adf_threshold)
-        self.df = self.cigs.df
-        self.beta = self.cigs.summary["B1"]
-        self.spread = self.extract_spread(self.df)
-        self.covs = self.autocov(nlags)
-        self.spread_weights = self.minimize_port(target_variance)
-        self.stock_weights = self.positioning(self.spread_weights)
-        self.stocks = self.stock_weights.index.values
+    def __init__(self, quantile=80, no_of_exceptions=2,
+                 n=50, adf_threshold=-2, target_variance=0.03, nlags=10):
+        self.df = pd.read_csv('../data/spx_hist_close.csv', index_col=0, parse_dates=True)
+        self.n = n
+        self.adf_threshold = adf_threshold
+        self.target_variance = target_variance
+        self.nlags = nlags
+        self.liq_filter = liquidity_filter(close_data=self.df, quantile=quantile, no_of_exceptions=no_of_exceptions)
 
-    def extract_spread(self, df):
+        self.train_df = None
+        self.test_df = None
+        self.cigs = None
+        self.beta = None
+        self.spread = None
+        self.covs = None
+        self.spread_weights = None
+        self.stock_weights = None
+        self.stock_weight_change = None
+        self.stocks = None
+        self.mrp_value = None
+        self.z_stat = None
+
+    def update_portfolio(self, datetime, new_year=True):
+        self.extract_spread(datetime, new_year)
+        self.calculate_portfolio(datetime)
+
+    def extract_spread(self, datetime, new_year=True):
+        if new_year:
+            self.test_df = self.liq_filter.filter_uni[datetime]
+            self.train_df = self.test_df.loc[str(datetime)]
+        else:
+            self.train_df = self.test_df.loc[:datetime]
+
+        self.cigs = cig_subspace(self.train_df, self.n, self.adf_threshold)
+        self.beta = self.cigs.summary["B1"]
+
         cig_pairs = self.cigs.cig_pairs
-        st = pd.DataFrame()
+        spread = pd.DataFrame()
         for i in range(len(cig_pairs)):
-            y = df[cig_pairs.index[i][0]]
-            x = df[cig_pairs.index[i][1]]
+            y = self.test_df[cig_pairs.index[i][0]]
+            x = self.test_df[cig_pairs.index[i][1]]
             b1 = self.cigs.summary.iloc[i, 1]
             s = y - b1 * x
             s.name = cig_pairs.index[i]
-            st = pd.concat([st, s], axis=1)
-        return st
+            spread = pd.concat([spread, s], axis=1)
+        spread.index = pd.to_datetime(spread.index.values)
+        self.spread = spread
 
-    def autocov(self, nlags):
-        model = VAR(self.spread)
+    def calculate_portfolio(self, datetime):
+        self.covs = self.autocov(self.spread.loc[:str(datetime)], self.nlags)
+        self.spread_weights = self.minimize_port(self.target_variance)
+        stock_weights = self.decomp_spread(self.spread_weights)
+        if self.stock_weights is not None:
+            self.stock_weight_change = (stock_weights - self.stock_weights).dropna()
+        self.stock_weights = stock_weights
+        self.stocks = self.stock_weights.index.values
+        self.mrp_value = (self.test_df[self.stocks] * self.stock_weights.values.T).sum(axis=1)
+        self.z_stat = (self.mrp_value.loc[:str(datetime)].mean(), self.mrp_value.loc[:str(datetime)].std())
+
+    def autocov(self, spread, nlags):
+        model = VAR(spread.values)
         M = model.fit(maxlags=nlags).sample_acov(nlags=nlags)
         return M
 
@@ -134,7 +173,7 @@ class mrp:
 
         return pd.DataFrame(out.x, index=self.spread.columns)
 
-    def positioning(self, spread_weights):
+    def decomp_spread(self, spread_weights):
         """
         Make sure the beta's stock pairs is in the same order with the weights
         """
@@ -146,3 +185,8 @@ class mrp:
         out = out.groupby(out.index).sum()
 
         return out
+
+    def remove_stock(self, stock, datetime):
+        self.beta = self.beta[[stock not in pair for pair in self.spread.columns]]
+        self.spread = self.spread.T[[stock not in pair for pair in self.spread.columns]].T
+        self.calculate_portfolio(datetime)

@@ -4,9 +4,15 @@ import numpy as np
 
 class liquidity_filter:
 
-    def __init__(self, quantile=80, no_of_exceptions=2):
-        self.close_data = pd.read_csv('../data/spx_hist_close.csv', index_col=0, parse_dates=True)
-        self.vol_data = pd.read_csv('../data/spx_hist_volume.csv', index_col=0, parse_dates=True)
+    def __init__(self, close_data=None, vol_data=None, quantile=80, no_of_exceptions=2):
+        if close_data is None:
+            self.close_data = pd.read_csv('../data/spx_hist_close.csv', index_col=0, parse_dates=True)
+        else:
+            self.close_data = close_data
+        if vol_data is None:
+            self.vol_data = pd.read_csv('../data/spx_hist_volume.csv', index_col=0, parse_dates=True)
+        else:
+            self.vol_data = vol_data
         self.vol_thres = self.vol_data.apply(np.nanpercentile, axis=1, q=quantile)
         self.vol_filter = self.vol_data.apply(lambda x: np.where(x < self.vol_thres, True, False)).resample('Y').sum()
         self.vol_filter = self.vol_filter <= no_of_exceptions
@@ -24,7 +30,7 @@ class liquidity_filter:
 
         train_period = pd.DataFrame.from_dict(train_period)
         filter_uni = {i: self.close_data[train_period.T[train_period.apply(
-            lambda x: i in x[0])].index.values].loc[str(i)].dropna(axis=1) for i in range(2000, 2022)}
+            lambda x: i in x[0])].index.values].loc[str(i):str(i+1)].dropna(axis=1) for i in range(2000, 2022)}
 
         filter_stocks = []
         for filter_df in filter_uni.values():
@@ -32,3 +38,11 @@ class liquidity_filter:
         filter_stocks = set(filter_stocks)
 
         return filter_uni, filter_stocks
+
+
+class data_enddate:
+    def __init__(self, stock_data):
+        self.stock_enddate = ((1*stock_data.isna()).diff() == 1).shift(-1).fillna(False)
+
+    def __call__(self, d):
+        return self.stock_enddate[d.strftime('%Y-%m-%d')]

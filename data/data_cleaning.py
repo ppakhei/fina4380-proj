@@ -10,24 +10,27 @@ if __name__ == '__main__':
     # spx_close = pd.concat([spx_close_1, spx_close_2]).reset_index(drop=True)
     # raw_data = spx_close
 
-    spx_volume = pd.read_excel('spx_memb_volume_data.xlsx')
-    raw_data = spx_volume
+    # spx_volume = pd.read_excel('spx_memb_volume_data.xlsx')
+    # raw_data = spx_volume
+    #
+    # clean_data = []
+    #
+    # for i in range(int(2348/2)):
+    #     stock_name = raw_data.iloc[2*i, 0].split()[0].replace('/', '-')
+    #     close = raw_data.iloc[2*i:2*(i+1), 3:].T.dropna().set_index(2*i)
+    #     close.index.name = 'Date'
+    #     if not close.empty:
+    #         close.columns = [stock_name]
+    #         clean_data.append(close)
+    #
+    # output_data = pd.concat(clean_data, axis=1).groupby(level=0, axis=1).sum().replace(0, np.nan)
+    # output_data.to_csv('spx_hist_volume.csv')
 
-    clean_data = []
+    output_data = pd.read_csv('spx_hist_close.csv', index_col=0, parse_dates=True)
 
-    for i in range(int(2348/2)):
-        stock_name = raw_data.iloc[2*i, 0].split()[0].replace('/', '-')
-        close = raw_data.iloc[2*i:2*(i+1), 3:].T.dropna().set_index(2*i)
-        close.index.name = 'Date'
-        close.columns = [stock_name]
-        clean_data.append(close)
-
-    output_data = pd.concat(clean_data, axis=1).groupby(level=0, axis=1).sum().replace(0, np.nan)
-    output_data.to_csv('spx_hist_volume.csv')
-
-    # for i in range(output_data.shape[1]):
-    #     stock_data = output_data.iloc[:, i].dropna()
-    #     stock_data.index = pd.to_datetime(stock_data.index).date
-    #     stock_name = stock_data.name
-    #     stock_data.name = 'Close'
-    #     stock_data.to_csv(f'stocks/{stock_name}.csv')
+    for i in range(output_data.shape[1]):
+        stock_data = output_data.iloc[:, i].fillna(0)
+        stock_data.index = pd.to_datetime(stock_data.index).date
+        stock_name = stock_data.name
+        stock_data.name = 'Close'
+        stock_data.to_csv(f'stocks/{stock_name}.csv')
