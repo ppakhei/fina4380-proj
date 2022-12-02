@@ -2,7 +2,7 @@ import pandas as pd
 import numpy as np
 
 
-class liquidity_filter:
+class LiquidityFilter:
 
     def __init__(self, close_data=None, vol_data=None, quantile=80, no_of_exceptions=2):
         if close_data is None:
@@ -38,11 +38,3 @@ class liquidity_filter:
         filter_stocks = set(filter_stocks)
 
         return filter_uni, filter_stocks
-
-
-class data_enddate:
-    def __init__(self, stock_data):
-        self.stock_enddate = ((1*stock_data.isna()).diff() == 1).shift(-1).fillna(False)
-
-    def __call__(self, d):
-        return self.stock_enddate[d.strftime('%Y-%m-%d')]

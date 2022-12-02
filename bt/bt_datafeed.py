@@ -1,4 +1,3 @@
-import datetime
 import backtrader.feeds as btfeeds
 
 
@@ -14,3 +13,11 @@ class CloseData(btfeeds.GenericCSVData):
         ('volume', -1),
         ('openinterest', -1)
     )
+
+
+class DataEndDate:
+    def __init__(self, stock_data):
+        self.stock_enddate = ((1*stock_data.isna()).diff() == 1).shift(-2).fillna(False)
+
+    def __call__(self, d):
+        return self.stock_enddate[d.strftime('%Y-%m-%d')]
